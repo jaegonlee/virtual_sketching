@@ -1,5 +1,5 @@
 import tensorflow as tf
-
+from hparam import *
 
 #############################################
 # Common parameters
@@ -241,7 +241,7 @@ def get_default_hparams_rough():
 
 def get_default_hparams_normal():
     """Return default HParams for sketch-rnn."""
-    hparams = tf.contrib.training.HParams(
+    hparams = HParams(
         program_name='new_train_faces',
         data_set='faces',  # ['rough_sketches', 'faces']
 
