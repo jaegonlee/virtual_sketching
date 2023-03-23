@@ -4,15 +4,17 @@ import tensorflow as tf
 from six.moves import range
 from PIL import Image
 import argparse
+import time
+import cv2
 
 import hyper_parameters as hparams
 from model_common_test import DiffPastingV3, VirtualSketchingModel
 from utils import reset_graph, load_checkpoint, update_hyperparams, draw, \
     save_seq_data, image_pasting_v3_testing, draw_strokes
 from dataset_utils import load_dataset_testing
+from tensorflow.python.client import device_lib
 
 os.environ['CUDA_VISIBLE_DEVICES'] = '0'
-
 
 def sample(sess, model, input_photos, init_cursor, image_size, init_len, seq_len, state_dependent,
            pasting_func):
@@ -160,6 +162,7 @@ def main_testing(test_image_base_dir, test_dataset, test_image_name,
         tmp_max_len = eval_hps_model.max_seq_len
     else:
         tmp_max_len = longer_infer_len
+    start = time.time()
 
     for sampling_i in range(sampling_num):
         input_photos, init_cursors, test_image_size = test_set.get_test_image()
@@ -223,14 +226,83 @@ def main_testing(test_image_base_dir, test_dataset, test_image_name,
                      sess,
                      pasting_func=paste_v3_func,
                      save_seq=draw_seq, draw_order=draw_order)
+        print("time :", time.time() - start)
+    
+    start = time.time()
+
+    for sampling_i in range(sampling_num):
+        input_photos, init_cursors, test_image_size = test_set.get_test_image()
+        # input_photos: (1, image_size, image_size, 3), [0-stroke, 1-BG]
+        # init_cursors: (N, 1, 2), in size [0.0, 1.0)
+
+        print()
+        print(test_image_name, ', image_size:', test_image_size, ', sampling_i:', sampling_i)
+        print('Processing ...')
+
+        if init_cursors.ndim == 3:
+            init_cursors = np.expand_dims(init_cursors, axis=0)
+
+        input_photos = input_photos[0:1, :, :, :]
+
+        ori_img = (input_photos.copy()[0] * 255.0).astype(np.uint8)
+        ori_img_png = Image.fromarray(ori_img, 'RGB')
+        ori_img_png.save(os.path.join(sampling_dir, test_image_raw_name + '_input.png'), 'PNG')
+
+        # decoding for sampling
+        strokes_raw_out_list, states_raw_out_list, states_soft_out_list, pred_imgs_out, window_size_out_list = sample(
+            sess, sampling_model, input_photos, init_cursors, test_image_size,
+            eval_hps_model.max_seq_len, tmp_max_len, state_dependent, paste_v3_func)
+        # pred_imgs_out: (N, H, W), [0.0-BG, 1.0-stroke]
+
+        output_i = 0
+        strokes_raw_out = np.stack(strokes_raw_out_list[output_i], axis=0)
+        states_raw_out = states_raw_out_list[output_i]
+        states_soft_out = states_soft_out_list[output_i]
+        window_size_out = window_size_out_list[output_i]
+
+        round_new_lengths = [tmp_max_len]
+        multi_cursors = [init_cursors[0, output_i, 0, :]]
+
+        print('strokes_raw_out', strokes_raw_out.shape)
+
+        clean_states_soft_out = np.array(states_soft_out)  # (N)
+
+        flag_list = strokes_raw_out[:, 0].astype(np.int32)  # (N)
+        drawing_len = len(flag_list) - np.sum(flag_list)
+        assert drawing_len >= 0
+
+        # print('    flag  raw\t soft\t x1\t\t y1\t\t x2\t\t y2\t\t r2\t\t s2')
+        for i in range(strokes_raw_out.shape[0]):
+            flag, x1, y1, x2, y2, r2, s2 = strokes_raw_out[i]
+            win_size = window_size_out[i]
+            out_format = '#%d: %d  | %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f, %.4f'
+            out_values = (i, flag, states_raw_out[i], clean_states_soft_out[i], x1, y1, x2, y2, r2, s2)
+            out_log = out_format % out_values
+            # print(out_log)
+
+        print('Saving results ...')
+        save_seq_data(sampling_dir, test_image_raw_name + '_' + str(sampling_i),
+                      strokes_raw_out, init_cursors[0, output_i, 0, :],
+                      test_image_size, tmp_max_len, eval_hps_model.min_width)
+
+        draw_strokes(strokes_raw_out, sampling_dir, test_image_raw_name + '_' + str(sampling_i) + '_pred.png',
+                     ori_img, test_image_size,
+                     multi_cursors, round_new_lengths, eval_hps_model.min_width, eval_hps_model.cursor_type,
+                     sample_hps_model.raster_size, sample_hps_model.min_window_size,
+                     sess,
+                     pasting_func=paste_v3_func,
+                     save_seq=draw_seq, draw_order=draw_order)
+        print("time :", time.time() - start)    
 
 
 def main(model_name, test_image_name, sampling_num):
+    print(device_lib.list_local_devices())
+
     test_dataset = 'faces'
     test_image_base_dir = 'sample_inputs'
 
-    sampling_base_dir = 'outputs/sampling'
-    model_base_dir = 'outputs/snapshot'
+    sampling_base_dir = 'outputs\sampling'
+    model_base_dir = 'outputs\snapshot'
 
     state_dependent = False
     longer_infer_len = 100
