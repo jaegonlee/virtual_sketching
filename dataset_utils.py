@@ -5,13 +5,14 @@ import scipy.io
 import numpy as np
 import tensorflow as tf
 from PIL import Image
+from hparam import *
 
 from rasterization_utils.RealRenderer import GizehRasterizor as RealRenderer
 
 
 def copy_hparams(hparams):
     """Return a copy of an HParams instance."""
-    return tf.contrib.training.HParams(**hparams.values())
+    return HParams(**hparams.values())
 
 
 class GeneralRawDataLoader(object):
