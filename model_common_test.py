@@ -154,7 +154,7 @@ class VirtualSketchingModel(object):
             dec_cell = tf.contrib.rnn.DropoutWrapper(
                 dec_cell, output_keep_prob=self.hps.output_dropout_prob)
         self.dec_cell = dec_cell
-
+        tf.compat.v1.disable_eager_execution()
         self.input_photo = tf.compat.v1.placeholder(dtype=tf.float32,
                                           shape=[self.hps.batch_size, None, None, self.hps.input_channel])  # [0.0-stroke, 1.0-BG]
         self.init_cursor = tf.compat.v1.placeholder(
