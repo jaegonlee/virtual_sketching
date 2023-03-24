@@ -1,5 +1,6 @@
 import tensorflow as tf
-
+import tf_slim as slim
+from hparam import *
 
 def get_initializer(init_method):
     if init_method == 'xavier_normal':
@@ -106,7 +107,8 @@ def general_conv2d(inputconv, output_dim=64, filter_height=4, filter_width=4, st
         initializer = tf.compat.v1.truncated_normal_initializer(stddev=stddev)
 
     with tf.compat.v1.variable_scope(name) as scope:
-        conv = tf.contrib.layers.conv2d(inputconv, output_dim, [filter_width, filter_height],
+
+        conv = slim.conv2d(inputconv, output_dim, [filter_width, filter_height],
                                         [stride_width, stride_height], padding, activation_fn=None,
                                         weights_initializer=initializer,
                                         biases_initializer=tf.compat.v1.constant_initializer(0.0))
@@ -117,11 +119,11 @@ def general_conv2d(inputconv, output_dim=64, filter_height=4, filter_width=4, st
                 #                                        scope='instance_norm')
             elif norm_type == 'batch_norm':
                 # conv = batchnorm(conv, init_method=init_method)
-                conv = tf.contrib.layers.batch_norm(conv, decay=0.9, is_training=is_training, updates_collections=None,
+                conv = slim.batch_norm(conv, decay=0.9, is_training=is_training, updates_collections=None,
                                                     epsilon=1e-5, center=True, scale=True, scope="batch_norm")
             elif norm_type == 'layer_norm':
                 # conv = layernorm(conv, init_method=init_method)
-                conv = tf.contrib.layers.layer_norm(conv, center=True, scale=True, scope='layer_norm')
+                conv = slim.layer_norm(conv, center=True, scale=True, scope='layer_norm')
 
         if do_relu:
             if relufactor == 0:
